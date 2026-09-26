@@ -54,7 +54,7 @@
     <button id="mettre">Mettre l'image de test en cache</button>
   </div>
 
-  <div class="carte doux">Version 20260926-184625. Clés et vecteurs de TEST, sans valeur ; rien n'est envoyé nulle part.</div>
+  <div class="carte doux">Version 20260926-184838. Clés et vecteurs de TEST, sans valeur ; rien n'est envoyé nulle part.</div>
 </main>
 <script type="module">
 import { genererCles, importerEcdhPriveJwk, ouvrir, sceller, publiqueBrute, deB64u, b64u } from './enveloppe.js'
@@ -68,7 +68,7 @@ function note(liste, texte, ok) {
 function vider(liste) { document.getElementById(liste).innerHTML = '' }
 
 const installee = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
-note('contexte', `Contexte : <strong>${installee ? 'application installée' : 'onglet Safari'}</strong>`)
+note('contexte', `Contexte : <strong>${installee ? 'application installée' : 'onglet du navigateur'}</strong>`)
 note('contexte', 'crypto.subtle', !!subtle)
 
 // --- IndexedDB : clés (CryptoKey, clonables) et image de repli (Blob) -----------------------
@@ -168,13 +168,15 @@ async function imageTest() {
 async function controlerCache() {
   vider('cache')
   try {
-    const cache = await caches.open('pl3-p08-images')
+    // Délai borné : une Cache API bloquée doit se voir, pas figer la section.
+    const cache = await Promise.race([caches.open('pl3-p08-images'),
+      new Promise((_, ko) => setTimeout(() => ko(new Error('délai de 5 s dépassé')), 5000))])
     const r = await cache.match('image-test')
     if (r) {
       const b = await r.blob()
       note('cache', `<img src="${URL.createObjectURL(b)}" alt="">Cache API : image présente (${b.size} o, mise en cache le ${r.headers.get('X-Mise-En-Cache')})`, true)
     } else note('cache', 'Cache API : aucune image en cache')
-  } catch (e) { note('cache', `Cache API indisponible : ${e.name}`, false) }
+  } catch (e) { note('cache', `Cache API indisponible : ${e.name} ${e.message}`, false) }
   const blob = await lire('image-test')
   note('cache', blob ? `<img src="${URL.createObjectURL(blob)}" alt="">IndexedDB (repli) : image présente (${blob.size} o)` : 'IndexedDB (repli) : aucune image', blob ? true : undefined)
   note('cache', `Réseau : ${navigator.onLine ? 'en ligne' : 'HORS LIGNE'}`)
@@ -187,9 +189,9 @@ document.getElementById('mettre').addEventListener('click', async () => {
   await controlerCache()
 })
 
-const cles = await controlerCles()
-await versPython(cles)
-await controlerCache()
+// Sections indépendantes : un blocage dans l'une ne masque pas les autres.
+controlerCles().then(versPython).catch((e) => note('cles', `Échec : ${e.name} ${e.message}`, false))
+controlerCache().catch((e) => note('cache', `Échec : ${e.name} ${e.message}`, false))
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js')
 </script>
 </body>

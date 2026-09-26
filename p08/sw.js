@@ -1,6 +1,6 @@
 // Service worker de la preuve 0.8 : la page, son module et ses vecteurs restent disponibles
 // hors ligne (les images de test, elles, vivent dans le cache « pl3-p08-images », géré par la page).
-const CACHE = 'pl3-p08-20260926-184625'
+const CACHE = 'pl3-p08-20260926-184838'
 const FICHIERS = ['./', 'index.html', 'enveloppe.js', 'vecteurs.json', 'manifest.webmanifest', 'icone-192.png']
 
 self.addEventListener('install', (e) => {
