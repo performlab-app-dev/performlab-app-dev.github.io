@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PL3 p08">
+<meta name="theme-color" content="#8250df">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icone-192.png">
+<title>PL3 — preuve 0.8 WebCrypto</title>
+<style>
+  :root { --fond: #f4f5f7; --surface: #fff; --texte: #1f2328; --doux: #5b6270; --ok: #1a7f37; --ko: #cf222e; --bord: #d0d7de; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fond: #14171c; --surface: #1c2027; --texte: #e6e8eb; --doux: #9aa3b0; --ok: #3fb950; --ko: #f85149; --bord: #30363d; }
+  }
+  body { margin: 0; padding: max(16px, env(safe-area-inset-top)) 16px 16px; background: var(--fond); color: var(--texte); font: 16px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.2rem; margin: 0 0 12px; } h2 { font-size: 1rem; margin: 0 0 8px; }
+  .carte { background: var(--surface); border: 1px solid var(--bord); border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; }
+  ul { margin: 0; padding-left: 20px; } li { margin: 3px 0; overflow-wrap: anywhere; }
+  .ok { color: var(--ok); } .ko { color: var(--ko); } .doux { color: var(--doux); }
+  button { font: inherit; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--bord); background: var(--surface); color: var(--texte); margin: 4px 4px 4px 0; }
+  textarea { width: 100%; box-sizing: border-box; height: 7em; font: 12px ui-monospace, monospace; background: var(--fond); color: var(--texte); border: 1px solid var(--bord); border-radius: 6px; }
+  img { width: 48px; height: 48px; image-rendering: pixelated; border: 1px solid var(--bord); border-radius: 6px; vertical-align: middle; margin-right: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Preuve 0.8 — WebCrypto et cache</h1>
+  <div class="carte"><ul id="contexte"></ul></div>
+
+  <div class="carte">
+    <h2>1. Clés de l'appareil (IndexedDB, non extractibles)</h2>
+    <ul id="cles"></ul>
+    <button id="generer">Générer et enregistrer les clés</button>
+  </div>
+
+  <div class="carte">
+    <h2>2. Python → iPhone</h2>
+    <ul id="versjs"></ul>
+  </div>
+
+  <div class="carte">
+    <h2>3. iPhone → Python (facultatif)</h2>
+    <ul id="verspy"></ul>
+    <textarea id="sortie" readonly placeholder="Enveloppe scellée par ce téléphone"></textarea>
+    <button id="copier">Copier</button>
+  </div>
+
+  <div class="carte">
+    <h2>4. Images hors ligne</h2>
+    <ul id="cache"></ul>
+    <button id="mettre">Mettre l'image de test en cache</button>
+  </div>
+
+  <div class="carte doux">Version 20260926-184625. Clés et vecteurs de TEST, sans valeur ; rien n'est envoyé nulle part.</div>
+</main>
+<script type="module">
+import { genererCles, importerEcdhPriveJwk, ouvrir, sceller, publiqueBrute, deB64u, b64u } from './enveloppe.js'
+
+const subtle = crypto.subtle
+function note(liste, texte, ok) {
+  const li = document.createElement('li')
+  li.innerHTML = ok === undefined ? texte : `<span class="${ok ? 'ok' : 'ko'}">${ok ? '✔' : '✘'}</span> ${texte}`
+  document.getElementById(liste).appendChild(li)
+}
+function vider(liste) { document.getElementById(liste).innerHTML = '' }
+
+const installee = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true
+note('contexte', `Contexte : <strong>${installee ? 'application installée' : 'onglet Safari'}</strong>`)
+note('contexte', 'crypto.subtle', !!subtle)
+
+// --- IndexedDB : clés (CryptoKey, clonables) et image de repli (Blob) -----------------------
+function base() {
+  return new Promise((ok, ko) => {
+    const r = indexedDB.open('pl3-p08', 1)
+    r.onupgradeneeded = () => { r.result.createObjectStore('objets') }
+    r.onsuccess = () => ok(r.result)
+    r.onerror = () => ko(r.error)
+  })
+}
+async function lire(cle) {
+  const db = await base()
+  return new Promise((ok, ko) => {
+    const r = db.transaction('objets').objectStore('objets').get(cle)
+    r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error)
+  })
+}
+async function ecrire(cle, valeur) {
+  const db = await base()
+  return new Promise((ok, ko) => {
+    const t = db.transaction('objets', 'readwrite')
+    t.objectStore('objets').put(valeur, cle)
+    t.oncomplete = () => ok(); t.onerror = () => ko(t.error)
+  })
+}
+
+async function controlerCles() {
+  vider('cles')
+  const enregistre = await lire('cles-appareil')
+  if (!enregistre) {
+    note('cles', 'Aucune clé enregistrée sur cet appareil (première ouverture, ou données effacées).')
+    return null
+  }
+  const { cles, creees } = enregistre
+  const age = Math.round((Date.now() - creees) / 3600000 * 10) / 10
+  note('cles', `Clés retrouvées, créées le ${new Date(creees).toLocaleString('fr-FR')} (il y a ${age} h)`, true)
+  note('cles', `Privées non extractibles : ECDH ${!cles.ecdh.privateKey.extractable}, ECDSA ${!cles.ecdsa.privateKey.extractable}`,
+    !cles.ecdh.privateKey.extractable && !cles.ecdsa.privateKey.extractable)
+  try { await subtle.exportKey('jwk', cles.ecdh.privateKey); note('cles', 'Export de la clé privée : AUTORISÉ', false) }
+  catch (e) { note('cles', `Export de la clé privée refusé (${e.name})`, true) }
+  // Aller-retour avec les clés RELUES : sceller pour soi-même, rouvrir.
+  const pub = await publiqueBrute(cles.ecdh.publicKey)
+  const env = await sceller({ entete: '{"test":"soi"}', clair: 'aller-retour ✓', ecdsaPrive: cles.ecdsa.privateKey, destEcdhPubBrute: pub })
+  const clair = await ouvrir({ enveloppe: env, ecdhPrive: cles.ecdh.privateKey, expEcdsaPubBrute: await publiqueBrute(cles.ecdsa.publicKey) })
+  note('cles', 'Chiffrement + signature, puis ouverture, avec les clés relues', clair === 'aller-retour ✓')
+  const p = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : null
+  note('cles', `Stockage persistant : ${p === null ? 'API absente' : p ? 'oui' : 'non'}`)
+  return cles
+}
+
+document.getElementById('generer').addEventListener('click', async () => {
+  const deja = await lire('cles-appareil')
+  if (deja && !confirm('Des clés existent déjà. Les remplacer ?')) return
+  const cles = await genererCles()
+  await ecrire('cles-appareil', { cles, creees: Date.now() })
+  // Décision D2 : persistance demandée juste après la création des clés.
+  if (navigator.storage && navigator.storage.persist) await navigator.storage.persist()
+  const lues = await controlerCles()
+  await versPython(lues)
+})
+
+// --- Vecteurs -------------------------------------------------------------------------------
+const vecteurs = await (await fetch('vecteurs.json')).json()
+try {
+  const prive = await importerEcdhPriveJwk(vecteurs.telephone_test.ecdh_prive_jwk)
+  const clair = await ouvrir({ enveloppe: vecteurs.python_vers_js.enveloppe, ecdhPrive: prive, expEcdsaPubBrute: deB64u(vecteurs.desktop.ecdsa_pub) })
+  note('versjs', `Enveloppe Python ouverte (signature vérifiée) : « ${clair} »`, clair === vecteurs.python_vers_js.clair_attendu)
+  const falsifiee = { ...vecteurs.python_vers_js.enveloppe, entete: vecteurs.python_vers_js.enveloppe.entete.replace('"version_envoi":1', '"version_envoi":2') }
+  try { await ouvrir({ enveloppe: falsifiee, ecdhPrive: prive, expEcdsaPubBrute: deB64u(vecteurs.desktop.ecdsa_pub) }); note('versjs', 'En-tête falsifié ACCEPTÉ', false) }
+  catch (e) { note('versjs', `En-tête falsifié refusé (${e.message})`, true) }
+} catch (e) { note('versjs', `Échec : ${e.name} ${e.message}`, false) }
+
+async function versPython(cles) {
+  vider('verspy')
+  if (!cles) { note('verspy', 'Générer d\'abord les clés de l\'appareil (section 1).'); return }
+  const attendu = 'Réalisé depuis l\'iPhone : 4 × 6 à 82 kg. Accents : éèàçœ ✓'
+  const enveloppe = await sceller({ entete: JSON.stringify({ format: 1, id_message: 'preuve-08-iphone', version_envoi: 1, destinataire: 'desktop-de-test' }),
+    clair: attendu, ecdsaPrive: cles.ecdsa.privateKey, destEcdhPubBrute: deB64u(vecteurs.desktop.ecdh_pub) })
+  document.getElementById('sortie').value = JSON.stringify({ enveloppe, clair_attendu: attendu,
+    expediteur_ecdsa_pub: b64u(await publiqueBrute(cles.ecdsa.publicKey)) })
+  note('verspy', 'Enveloppe scellée par les clés de cet appareil pour le Desktop de test', true)
+}
+document.getElementById('copier').addEventListener('click', async () => {
+  await navigator.clipboard.writeText(document.getElementById('sortie').value)
+  note('verspy', 'Copiée dans le presse-papiers')
+})
+
+// --- Cache API et repli IndexedDB -----------------------------------------------------------
+async function imageTest() {
+  // Petite image PNG générée par canevas (aucun fichier à télécharger).
+  const c = document.createElement('canvas'); c.width = 8; c.height = 8
+  const g = c.getContext('2d')
+  g.fillStyle = '#8250df'; g.fillRect(0, 0, 8, 8); g.fillStyle = '#fff'; g.fillRect(2, 2, 4, 4)
+  return new Promise((ok) => c.toBlob(ok, 'image/png'))
+}
+async function controlerCache() {
+  vider('cache')
+  try {
+    const cache = await caches.open('pl3-p08-images')
+    const r = await cache.match('image-test')
+    if (r) {
+      const b = await r.blob()
+      note('cache', `<img src="${URL.createObjectURL(b)}" alt="">Cache API : image présente (${b.size} o, mise en cache le ${r.headers.get('X-Mise-En-Cache')})`, true)
+    } else note('cache', 'Cache API : aucune image en cache')
+  } catch (e) { note('cache', `Cache API indisponible : ${e.name}`, false) }
+  const blob = await lire('image-test')
+  note('cache', blob ? `<img src="${URL.createObjectURL(blob)}" alt="">IndexedDB (repli) : image présente (${blob.size} o)` : 'IndexedDB (repli) : aucune image', blob ? true : undefined)
+  note('cache', `Réseau : ${navigator.onLine ? 'en ligne' : 'HORS LIGNE'}`)
+}
+document.getElementById('mettre').addEventListener('click', async () => {
+  const b = await imageTest()
+  const cache = await caches.open('pl3-p08-images')
+  await cache.put('image-test', new Response(b, { headers: { 'Content-Type': 'image/png', 'X-Mise-En-Cache': new Date().toLocaleString('fr-FR') } }))
+  await ecrire('image-test', b)
+  await controlerCache()
+})
+
+const cles = await controlerCles()
+await versPython(cles)
+await controlerCache()
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js')
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 // Service worker de la preuve 0.7 : page disponible hors ligne, mise à jour sur demande.
 // Le nom du cache porte la version : une nouvelle publication = un nouveau fichier sw.js,
 // détecté par le navigateur, installé en attente jusqu'au clic « Mettre à jour ».
-const CACHE = 'pl3-preuve-07-racine-20260926-171123'
+const CACHE = 'pl3-preuve-07-racine-20260926-184625'
 const FICHIERS = ['./', 'index.html', 'manifest.webmanifest', 'icone-192.png', 'icone-512.png']
 
 self.addEventListener('install', (e) => {
