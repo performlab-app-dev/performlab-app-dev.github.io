@@ -35,14 +35,15 @@
   <div class="carte">
     <button id="marquer">Écrire un marqueur ici</button>
     <button id="effacer">Effacer le marqueur</button>
+    <button id="persister">Demander le stockage persistant</button>
   </div>
   <div class="carte" style="color: var(--doux)">
-    Version de page : <strong>20260926-165034</strong>. Aucune donnée n'est envoyée nulle part : tout ce
+    Version de page : <strong>20260926-171123</strong>. Aucune donnée n'est envoyée nulle part : tout ce
     qui s'affiche est lu dans ce téléphone.
   </div>
 </main>
 <script>
-const VERSION = '20260926-165034'
+const VERSION = '20260926-171123'
 const etat = document.getElementById('etat')
 const lignes = {}
 
@@ -86,8 +87,20 @@ document.getElementById('marquer').addEventListener('click', () => {
 document.getElementById('effacer').addEventListener('click', () => { localStorage.removeItem(CLE); lireMarqueur() })
 lireMarqueur()
 
-navigator.storage && navigator.storage.persisted && navigator.storage.persisted().then((p) =>
-  ligne('persistant', 'Stockage persistant accordé', p ? 'oui' : 'non'))
+// persisted() ne fait que LIRE l'état ; seul persist() le DEMANDE (version D de la preuve).
+function lirePersistance() {
+  navigator.storage && navigator.storage.persisted && navigator.storage.persisted().then((p) =>
+    ligne('persistant', 'Stockage persistant accordé', p ? 'oui' : 'non'))
+  navigator.storage && navigator.storage.estimate && navigator.storage.estimate().then((e) =>
+    ligne('quota', 'Quota estimé', `${Math.round((e.usage || 0) / 1024)} Kio utilisés sur ${Math.round((e.quota || 0) / 1048576)} Mio`))
+}
+lirePersistance()
+document.getElementById('persister').addEventListener('click', async () => {
+  if (!navigator.storage || !navigator.storage.persist) return ligne('demande', 'Demande de persistance', 'API absente', false)
+  const accorde = await navigator.storage.persist()
+  ligne('demande', 'Demande de persistance', accorde ? 'ACCORDÉE' : 'refusée', accorde)
+  lirePersistance()
+})
 
 // Service worker : hors ligne et mise à jour forcée.
 if ('serviceWorker' in navigator) {
