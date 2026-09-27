@@ -1,21 +1,13 @@
 {
-  "name": "PL3 preuve 0.7 (racine)",
-  "short_name": "PL3 racine",
+  "id": "/",
+  "name": "PerformLab — Espace athlète",
+  "short_name": "PerformLab",
+  "description": "Tes séances d'entraînement, envoyées par ton coach.",
   "display": "standalone",
-  "scope": "./",
   "background_color": "#14171c",
-  "theme_color": "#1f6feb",
+  "theme_color": "#1d2128",
   "icons": [
-    {
-      "src": "icone-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icone-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ],
-  "start_url": "./"
+    { "src": "icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
 }

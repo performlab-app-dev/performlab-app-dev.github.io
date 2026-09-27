@@ -1,30 +1,55 @@
-// Service worker de la preuve 0.7 : page disponible hors ligne, mise à jour sur demande.
-// Le nom du cache porte la version : une nouvelle publication = un nouveau fichier sw.js,
-// détecté par le navigateur, installé en attente jusqu'au clic « Mettre à jour ».
-const CACHE = 'pl3-preuve-07-racine-20260926-184838'
-const FICHIERS = ['./', 'index.html', 'manifest.webmanifest', 'icone-192.png', 'icone-512.png']
+// Service worker de la PWA athlète (chantier serveur/PWA, étapes 6.1 et 6.3).
+//
+// 0.1.0-muk2nr1e est remplacé à CHAQUE construction (vite.config.ts) : un nouveau sw.js est alors
+// détecté par le téléphone, installé en attente, et activé quand l'application le demande
+// (message « activer ») — mise à jour forcée de l'étape 6.3.
+//
+// Hors ligne : la page est servie depuis le cache (réseau d'abord, pour voir toute nouvelle
+// version dès qu'elle existe) ; les fichiers construits (noms à empreinte) depuis le cache
+// d'abord, et mis en cache au premier passage. Seule l'origine de la PWA est concernée : les
+// appels à la boîte Supabase ne passent jamais par ce cache.
+const CACHE = 'pl3-pwa-0.1.0-muk2nr1e'
+const COQUILLE = ['./', 'index.html', 'manifest.webmanifest', 'icone-192.png', 'icone-512.png']
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FICHIERS)))
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(COQUILLE)))
 })
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((cles) =>
-    Promise.all(cles.filter((k) => k.startsWith('pl3-preuve-07-racine-') && k !== CACHE).map((k) => caches.delete(k)))
-  ).then(() => self.clients.claim()))
+  e.waitUntil(
+    caches
+      .keys()
+      .then((cles) =>
+        Promise.all(
+          cles.filter((k) => k.startsWith('pl3-pwa-') && k !== CACHE).map((k) => caches.delete(k)),
+        ),
+      )
+      .then(() => self.clients.claim()),
+  )
 })
 
 self.addEventListener('message', (e) => {
   if (e.data === 'activer') self.skipWaiting()
 })
 
-// Réseau d'abord pour la page (voir une nouvelle version dès qu'elle existe), cache en repli
-// (hors ligne) ; cache d'abord pour le reste.
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return
+  const url = new URL(e.request.url)
+  if (e.request.method !== 'GET' || url.origin !== location.origin) return
   if (e.request.mode === 'navigate') {
     e.respondWith(fetch(e.request).catch(() => caches.match('index.html')))
     return
   }
-  e.respondWith(caches.match(e.request).then((r) => r || fetch(e.request)))
+  e.respondWith(
+    caches.match(e.request).then(
+      (trouve) =>
+        trouve ||
+        fetch(e.request).then((reponse) => {
+          if (reponse.ok) {
+            const copie = reponse.clone()
+            caches.open(CACHE).then((c) => c.put(e.request, copie))
+          }
+          return reponse
+        }),
+    ),
+  )
 })
