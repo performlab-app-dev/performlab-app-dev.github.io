@@ -1,6 +1,6 @@
 // Service worker de la PWA athlète (chantier serveur/PWA, étapes 6.1 et 6.3).
 //
-// 0.1.0-muk2nr1e est remplacé à CHAQUE construction (vite.config.ts) : un nouveau sw.js est alors
+// 0.1.0-muk34pqc est remplacé à CHAQUE construction (vite.config.ts) : un nouveau sw.js est alors
 // détecté par le téléphone, installé en attente, et activé quand l'application le demande
 // (message « activer ») — mise à jour forcée de l'étape 6.3.
 //
@@ -8,7 +8,7 @@
 // version dès qu'elle existe) ; les fichiers construits (noms à empreinte) depuis le cache
 // d'abord, et mis en cache au premier passage. Seule l'origine de la PWA est concernée : les
 // appels à la boîte Supabase ne passent jamais par ce cache.
-const CACHE = 'pl3-pwa-0.1.0-muk2nr1e'
+const CACHE = 'pl3-pwa-0.1.0-muk34pqc'
 const COQUILLE = ['./', 'index.html', 'manifest.webmanifest', 'icone-192.png', 'icone-512.png']
 
 self.addEventListener('install', (e) => {
