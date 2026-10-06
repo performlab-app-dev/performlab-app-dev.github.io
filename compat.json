@@ -4,7 +4,7 @@
   "desktop_min_version": "0.2.0",
   "box_schema": {
     "min": 1,
-    "max": 2
+    "max": 3
   },
   "snapshot_formats": [
     1
