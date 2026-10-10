@@ -1,6 +1,6 @@
 {
   "manifest_format": 1,
-  "pwa_version": "0.2.0",
+  "pwa_version": "0.3.0",
   "desktop_min_version": "0.2.0",
   "box_schema": {
     "min": 1,
